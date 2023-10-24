@@ -1,0 +1,5 @@
+local struct = require("examples/lib/struct")
+local packed = struct.pack("<h", 500)
+local h = struct.unpack("<h", packed)
+print(h)
+print(string.byte(packed, 1, -1))
