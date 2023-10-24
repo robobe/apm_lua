@@ -3,9 +3,11 @@
 -- Load CAN driver, using the scripting protocol and with a buffer size of 5
 local buf_len = uint32_t(20)
 local driver = CAN:get_device(buf_len)
+local my_id = uint32_t(50)
 
 function show_frame(dnum, frame)
-  gcs:send_text(0,string.format("CAN[%u] msg from " .. tostring(frame:id()) .. ": %i, %i, %i, %i, %i, %i, %i, %i", dnum, frame:data(0), frame:data(1), frame:data(2), frame:data(3), frame:data(4), frame:data(5), frame:data(6), frame:data(7)))
+  -- gcs:send_text(0,string.format("CAN[%u] msg from " .. tostring(frame:id()) .. ": %i, %i, %i, %i, %i, %i, %i, %i", dnum, frame:data(0), frame:data(1), frame:data(2), frame:data(3), frame:data(4), frame:data(5), frame:data(6), frame:data(7)))
+  gcs:send_text(0, tostring(frame:id()))
 end
 
 function update()
@@ -22,10 +24,11 @@ function update()
 
   msg = CANFrame()
 
+  
   -- extended frame, priority 30, message ID 1081 and node ID 11
   -- lua cannot handle numbers so large, so we have to use uint32_t userdata
-  msg:id( (uint32_t(1) << 31) | (uint32_t(30) << 24) | (uint32_t(1081) << 8) | uint32_t(11) )
-
+  -- msg:id( (uint32_t(1) << 31) | (uint32_t(30) << 24) | (uint32_t(1081) << 8) | uint32_t(11) )
+ msg:id(my_id)
   msg:data(0,0) -- set light_id = 0
 
 
