@@ -43,7 +43,7 @@ function DriveMsg:get_EngingState()
     return self.Commands & 1<<0
 end
 
-function DriveMsg:is_RearRampOpen()
+function DriveMsg:rear_ramp_open_state()
     return (self.Commands & REAR_RAMP_OPEN) == REAR_RAMP_OPEN
 end
 
@@ -81,7 +81,7 @@ function DriveMsg:toString()
         , self.Steer
         , self.Brake
         , self:get_EngingState()
-        , tostring(self:is_RearRampOpen())
+        , tostring(self:rear_ramp_open_state())
         , tostring(self:is_RearRampClose())
     )
     return message_str

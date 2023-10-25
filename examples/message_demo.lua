@@ -1,4 +1,7 @@
 -- region consts
+local THROTTEL_COMMAD_SAFE_STATE = 0
+local BRAK_COMMAND_SAFE_STATE = 255
+
 local ENGINE_STATE = 1<<0
 local REAR_RAMP_OPEN = 1<<1
 local REAR_RAMP_CLOSE = 1<<2
@@ -14,11 +17,16 @@ local INDEX_STEER_HIGH = 3
 local INDEX_STEER_LOW = 4
 local INDEX_BRAKE = 5
 local INDEX_STATUS = 6
+local INDEX_CMD = 6
 
-local BIT_MASK = 0x01
-local NIBBLE_MASK = 0x03
-local STATUS_REAR_RAMP_INDEX = 2<<1
-local STATUS_HORN_INDEX = 4<<1
+local BIT_MASK = 0x01   -- 0b00000001
+local NIBBLE_MASK = 0x03 -- 0b00000011
+local STATUS_FLAG_REAR_RAMP_INDEX = 2
+local STATUS_FLAG_HORN_INDEX = 4
+local STATUS_FLAG_SMOKE_INDEX = 5
+local STATUS_FLAG_LOW_BEAM_INDEX = 6
+local STATUS_FLAG_HIGH_BEAM_INDEX = 7
+local STATUS_FLAG_CAT_EYE_INDEX = 8
 -- endregion consts
 
 -- region helper functions
@@ -61,42 +69,36 @@ end
 
 function StatusMsg:rear_ramp_state()
     local state_str = {"close", "open", "mid-way", "error"} --TODO: move to global
-    local state = (self.Status >> STATUS_REAR_RAMP_INDEX) & NIBBLE_MASK
-    print("state --" .. state)
+    local state = (self.Status >> STATUS_FLAG_REAR_RAMP_INDEX) & NIBBLE_MASK
     return state, state_str[state+1]
 end
 
 function StatusMsg:horn()
     
-    local state = (self.Status >> STATUS_HORN_INDEX) & BIT_MASK
+    local state = (self.Status >> STATUS_FLAG_HORN_INDEX) & BIT_MASK
     return state
 end
 
 function StatusMsg:smoke()
-    local state = (self.Status >> 5) & BIT_MASK
+    local state = (self.Status >> STATUS_FLAG_SMOKE_INDEX) & BIT_MASK
     return state
 end
 function StatusMsg:low_beam()
-    local state = (self.Status >> 6) & BIT_MASK
+    local state = (self.Status >> STATUS_FLAG_LOW_BEAM_INDEX) & BIT_MASK
     return state
 end
 function StatusMsg:high_beam()
-    local state = (self.Status >> 7) & BIT_MASK
+    local state = (self.Status >> STATUS_FLAG_HIGH_BEAM_INDEX) & BIT_MASK
     return state
 end
 function StatusMsg:cay_eyes()
-    local state = (self.Status >> 8) & BIT_MASK
+    local state = (self.Status >> STATUS_FLAG_CAT_EYE_INDEX) & BIT_MASK
     return state
 end
 function StatusMsg:toString()
-    -- RampOpen %s
-    -- RampClode %s 
-    -- Horn: %s
-    -- Smoke: %s
-    -- , tostring(self:is_RearRampOpen())
-        -- , tostring(self:is_RearRampClose())
-        -- , tostring(self:isHorn())
-        -- , tostring(self:smoke())
+    --[[
+    return status message as string
+    --]]
     _, rear_ramp_state = self:rear_ramp_state()
     _, engine_state = self:enging_state()
 
@@ -129,6 +131,9 @@ end
 
 
 function StatusMsg:fromBytes(raw)
+    --[[
+    convert 8byte message to ststus message
+    --]]
     self.Throttle = from_i16(raw[INDEX_THROTLE_HIGH], raw[INDEX_THROTLE_LOW])
     self.Steer = from_i16(raw[INDEX_STEER_HIGH], raw[INDEX_STEER_LOW])
     self.Break = raw[INDEX_BRAKE]
@@ -138,74 +143,95 @@ end
 -- endregion status message
 
 -- region drive message
-function DriveMsg:new(throttle, horn)
+function DriveMsg:new()
     setmetatable({}, DriveMsg)
-    self.Throttle = throttle or 0
-    self.Commands = horn and self.Commands | HORN or self.Commands & ~HORN
+    self.Throttle = THROTTEL_COMMAD_SAFE_STATE
+    self.Break = BRAK_COMMAND_SAFE_STATE
+    self:enging_off()
     return self
 end
 
--- region state
-function DriveMsg:get_EngingState()
+-- region commands
+
+-- region engine cmd
+function DriveMsg:engine_state()
     return (self.Commands & ENGINE_STATE) == ENGINE_STATE
 end
 
-function DriveMsg:is_RearRampOpen()
+function DriveMsg:engine_on()
+    self.Commands = self.Commands | ENGINE_STATE
+end
+
+function DriveMsg:enging_off()
+    self.Commands = self.Commands & ~ENGINE_STATE
+end
+-- endregion engine cmd
+
+-- region open rear ramp
+function DriveMsg:rear_ramp_open_state()
     return (self.Commands & REAR_RAMP_OPEN) == REAR_RAMP_OPEN
 end
 
-function DriveMsg:is_RearRampClose()
+function DriveMsg:rear_ramp_open_on()
+    if not self:rear_ramp_close_state() then
+        self.Commands = self.Commands | REAR_RAMP_OPEN
+    end
+end
+
+function DriveMsg:rear_ramp_open_off()
+    self.Commands = self.Commands & ~REAR_RAMP_OPEN
+end
+-- endregion open reae ramp
+
+-- region rear ramp close
+function DriveMsg:rear_ramp_close_state()
     return (self.Commands & REAR_RAMP_CLOSE) == REAR_RAMP_CLOSE
 end
 
-function DriveMsg:isHorn()
+function DriveMsg:rear_ramp_close_on()
+    if not self:rear_ramp_open_state() then
+        self.Commands = self.Commands | REAR_RAMP_CLOSE
+    end
+end 
+
+function DriveMsg:rear_ramp_close_off()
+    self.Commands = self.Commands & ~REAR_RAMP_CLOSE
+end
+-- endregion rear ramp close
+
+-- region horn
+function DriveMsg:horn_state()
     return (self.Commands & HORN) == HORN
 end
 
-function DriveMsg:smoke()
+function DriveMsg:horn_on()
+    self.Commands = self.Commands | HORN
+end 
+
+function DriveMsg:horn_off()
+    self.Commands = self.Commands & ~HORN
+end
+-- endregion rear ramp close
+
+-- region smoke
+function DriveMsg:smoke_status()
     return (self.Commands & SMOKE) == SMOKE
 end
 
-function DriveMsg:LIGHT_LOW_BEAM()
+function DriveMsg:smoke_on()
+    self.Commands = self.Commands | SMOKE
+end
+    
+function DriveMsg:smoke_off()
+    self.Commands = self.Commands & ~SMOKE
+end
+-- endregion smoke
+
+-- region light_low_beam
+function DriveMsg:light_low_beam_status()
     return (self.Commands & LIGHT_LOW_BEAM) == LIGHT_LOW_BEAM
 end
 
-
--- endregion state
-
-function DriveMsg:set_RearRampClose(value)
-    if value then
-        self.Commands = self.Commands | REAR_RAMP_CLOSE
-    else
-        self.Commands = self.Commands & ~REAR_RAMP_CLOSE
-    end
-end
-
-function DriveMsg:set_RearRampOpen(value)
-    if value then
-        self.Commands = self.Commands | REAR_RAMP_OPEN
-    else
-        self.Commands = self.Commands & ~REAR_RAMP_OPEN
-    end
-end
-
-function DriveMsg:set_EngingState(value)
-    if value then
-        self.Commands = self.Commands | ENGINE_STATE
-    else
-        self.Commands = self.Commands & ~ENGINE_STATE
-    end
-end
-
-function DriveMsg:set_Smoke(value)
-    if value then
-        self.Commands = self.Commands | SMOKE
-    else
-        self.Commands = self.Commands & ~SMOKE
-    end
-end
-
--- region light_low_beam
 function DriveMsg:light_low_beam_on()
     self.Commands = self.Commands | LIGHT_LOW_BEAM
 end
@@ -216,6 +242,10 @@ end
 -- endregion light_low_beam
 
 -- region light high beam
+function DriveMsg:light_high_beam_status()
+    return (self.Commands & LIGHT_HIGH_BEAM) == LIGHT_HIGH_BEAM
+end
+
 function DriveMsg:light_high_beam_on()
     self.Commands = self.Commands | LIGHT_HIGH_BEAM
 end
@@ -226,6 +256,9 @@ end
 -- endregion light high beam
 
 -- region light_cay_eyes
+function DriveMsg:light_cat_eyes_status()
+    return (self.Commands & LIGHT_CAT_EYES) == LIGHT_CAT_EYES
+end
 function DriveMsg:light_cay_eyes_on()
     self.Commands = self.Commands | LIGHT_CAT_EYES
 end
@@ -235,39 +268,48 @@ function DriveMsg:light_cay_eyes_off()
 end
 -- endregion light_cay_eyes
 
+-- endregion commands
+
 -- region
+
 function DriveMsg:toString()
     message_str = string.format([[
     Throotle: %s
     Steer: %s
     Break: %s
     Engine: %s
-    RampOpen %s
-    RampClode %s 
+    Ramp open %s
+    Ramp close %s 
     Horn: %s
     Smoke: %s
+    Low beam: %s
+    High beam: %s
+    Cat eye: %s
     ]]
         , self.Throttle
         , self.Steer
-        , self.Brake
-        , tostring(self:get_EngingState())
-        , tostring(self:is_RearRampOpen())
-        , tostring(self:is_RearRampClose())
-        , tostring(self:isHorn())
-        , tostring(self:smoke())
+        , self.Break
+        , tostring(self:engine_state())
+        , tostring(self:rear_ramp_open_state())
+        , tostring(self:rear_ramp_close_state())
+        , tostring(self:horn_state())
+        , tostring(self:smoke_status())
+        , tostring(self:light_low_beam_status())
+        , tostring(self:light_high_beam_status())
+        , tostring(self:light_cat_eyes_status())
     )
     return message_str
 end
 
 function DriveMsg:toBytes()
     raw = {0, 0, 0, 0, 0, 0, 0, 0}
-    raw[1], raw[2] = to_i16(self.Throttle)
+    raw[INDEX_THROTLE_HIGH], raw[INDEX_THROTLE_LOW] = to_i16(self.Throttle)
+    raw[INDEX_STEER_HIGH], raw[INDEX_STEER_LOW] = to_i16(self.Steer)
+    raw[INDEX_BRAKE] = self.Break
+    raw[INDEX_CMD] = self.Commands
     return raw
 end
 
-function DriveMsg:fromBytes(raw)
-    self.Throttle = from_i16(raw[1], raw[2])
-end
 -- endregion
 
 -- endregion message
@@ -277,17 +319,10 @@ status_message:fromBytes({1, 244, 0, 0, 0, 0x091c})
 print("status:" .. status_message.Status)
 print(status_message:toString())
 print("-----------------")
--- message = DriveMsg:new()
--- message:fromBytes({1, 244, 0})
--- message:set_EngingState(true)
--- -- message:set_EngingState(false)
--- message:set_RearRampOpen(true)
--- -- message:set_RearRampOpen(false)
--- -- message:set_RearRampClose(true)
--- print(type(message:is_RearRampClose()))
--- print(message:toString())
--- for i, b in pairs(message:toBytes()) do
---     print(i, b)
--- end
+drive_cmd_msg = DriveMsg:new()
+drive_cmd_msg:engine_on()
+drive_cmd_msg:rear_ramp_open_on()
+drive_cmd_msg:rear_ramp_close_on()
+print(drive_cmd_msg:toString())
 
 
